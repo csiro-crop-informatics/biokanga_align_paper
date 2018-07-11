@@ -73,6 +73,7 @@ referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; referen
 process rnfSimReads {
   tag{simmeta}
   label 'rnftools'
+  // label 'samtools'
 
   input:
     set val(meta), file(ref) from references4rnfSimReads
