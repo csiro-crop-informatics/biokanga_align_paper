@@ -1,0 +1,23 @@
+{
+  "simreads": {
+    "simulator": [
+      "ArtIllumina",
+      "CuReSim",
+      "DwgSim",
+      "MasonIllumina",
+      "WgSim"
+    ],
+    "nreads": 1000,
+    "length": 100,
+    "mode": [
+      "SE",
+      "PE"
+    ],
+    "distance": [
+      300
+    ],
+    "distanceDev": [
+      50
+    ]
+  }
+}

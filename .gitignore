@@ -1,0 +1,5 @@
+.vscode
+.nextflow*
+results/
+work/
+conf/cloud.config
