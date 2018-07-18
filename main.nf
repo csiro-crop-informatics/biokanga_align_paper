@@ -70,7 +70,7 @@ process fetchRemoteReference {
 }
 
 //Mix local and remote references then connect o multiple channels
-referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index } //references4kangaSimReads;
+referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index } 
 
 // simulators = ["ArtIllumina", "DwgSim", "MasonIllumina", "WgSim"] //also CuReSim if SE only
 // reads4kangaAlign = Channel.create()
@@ -88,7 +88,7 @@ process rnfSimReads {
     each distanceDev from params.simreads.distanceDev //PE only
 
   output:
-    set val(simmeta), file("*.fq.gz") into reads4bwaAlign, reads4bowtie2align //,reads4kangaAlign
+    set val(simmeta), file("*.fq.gz") into reads4bwaAlign, reads4bowtie2align, reads4kangaAlign
 
 
   when:
@@ -131,25 +131,26 @@ process rnfSimReads {
     """
 }
 
-// process kangaIndex {
-//   label 'biokanga'
-//   tag{tag}
-//   input:
-//     set val(meta), file(ref) from references4kangaIndex
+process kangaIndex {
+  label 'biokanga'
+  tag{tag}
 
-//   output:
-//     set val(dbmeta), file(kangadb) into kangadbs
+  input:
+    set val(meta), file(ref) from references4kangaIndex
 
-//   script:
-//     tag=getTagFromMeta(meta, ' ')
-//     dbmeta = ["species": meta.species, "version": meta.version]
-//     """
-//     biokanga index \
-//     -i ${ref} \
-//     -o kangadb \
-//     --ref ${ref}
-//     """
-// }
+  output:
+    set val(dbmeta), file(kangadb) into kangadbs
+
+  script:
+    tag=getTagFromMeta(meta, ' ')
+    dbmeta = ["species": meta.species, "version": meta.version]
+    """
+    biokanga index \
+    -i ${ref} \
+    -o kangadb \
+    --ref ${ref}
+    """
+}
 
 process bwaIndex {
   label 'bwa'
@@ -186,118 +187,105 @@ process bowtie2Index {
     """
 }
 
-// // kangadbsFeedback = Channel.create()
-// process kangaAlign {
-//   label 'biokanga'
-//   tag {alignmeta}
-//   input:
-//     each metaAndReads from reads4kangaAlign //tuple is: set val(meta0),val(simmeta),file("?.fq.gz") 
-//     // set val(simmeta),file("?.fq.gz") from reads4kangaAlign//.mix(kangaFASTQ)
-//     set val(dbmeta),file(kangadb) from kangadbs//.mix(kangadbsFeedback)
-
-//   //  output:
-//   //   set val(dbmeta),file(kangadb) into kangadbsFeedback
-//   //   set val(meta), val(tag), file("${tag}.bam") into kangaBAMs
-
-//   // when:
-//   //   meta0.species == dbmeta.species
-
-//   script:
-//     // meta = meta0.clone() //otherwise modifying orginal map, triggering re-runs with -resume
-//     // meta.ref = dbmeta
-//     // meta.aligner = "BioKanga"    
-//     simmeta = metaAndReads[0]
-//     basename = simmeta.tag+"_vs_"+dbmeta+".biokanga"
-//     // tag = simmeta.toString()+" VS "+dbmeta 
-//     alignmeta = dbmeta + simmeta
-//     if(simmeta.mode == "SE") {
-//       r1 = file(metaAndReads[1])
-//       """
-//       biokanga align \
-//       -i ${r1} \
-//       --sfx ${kangadb} \
-//       --threads ${task.cpus} \
-//       -o "${basename}.bam" 
-//       """
-//     } else if(simmeta.mode == "PE"){
-//       r1 = file(metaAndReads[1][0])
-//       r2 = file(metaAndReads[1][1])
-//       """
-//       biokanga align \
-//       -i ${r1} \
-//       -u ${r1} \
-//       --sfx ${kangadb} \
-//       --threads ${task.cpus} \
-//       -o "${basename}.bam" \
-//       --pemode 2 
-//       """
-//     }
-// }
-
 process bwaAlign {
-  label 'bwa'
+  label 'bwa'  
+  label 'samtools'
   tag {alignmeta}
 
   input:    
-    each metaAndReads from reads4bwaAlign //tuple is: set val(meta0),val(simmeta),file("?.fq.gz") 
-    set val(dbmeta), file('*') from bwadbs
+    set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bwaAlign.combine(bwadbs) //cartesian product i.e. all input sets of reads vs all dbs
+
+  when:
+    simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
 
   script:
     dbBasename=getTagFromMeta(dbmeta)
-    simmeta = metaAndReads[0]
     alignmeta = dbmeta + simmeta
-
-    // if(metaAndReads[2].getClass() instanceof ArrayList) {    
-    
     if(simmeta.mode == 'SE') {
-      r1 = file(metaAndReads[1])
       """
-      bwa mem ${dbBasename}.fasta ${r1} > out.sam
+      bwa mem ${dbBasename}.fasta 1.fq.gz | samtools view -bS > out.bam
       """
     } else {
-      r1 = file(metaAndReads[1][0])
-      r2 = file(metaAndReads[1][1])
       """
-      bwa mem ${dbBasename}.fasta ${r1} ${r2} > out.sam
+      bwa mem ${dbBasename}.fasta 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
       """
     }
       
 }
 
+process kangaAlign {
+  label 'biokanga'
+  tag {alignmeta}
+
+  input:
+    set val(simmeta), file("?.fq.gz"), val(dbmeta), file(kangadb) from reads4kangaAlign.combine(kangadbs) //cartesian product i.e. all input sets of reads vs all dbs
+    
+  //  output:
+  //   set val(dbmeta),file(kangadb) into kangadbsFeedback
+  //   set val(meta), val(tag), file("${tag}.bam") into kangaBAMs
+
+  when:
+    simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
+
+  script:
+    // meta = meta0.clone() //otherwise modifying orginal map, triggering re-runs with -resume
+    // meta.ref = dbmeta
+    // meta.aligner = "BioKanga"    
+    // simmeta = metaAndReads[0]
+    // basename = simmeta.tag+"_vs_"+dbmeta+".biokanga"
+    // tag = simmeta.toString()+" VS "+dbmeta 
+    alignmeta = dbmeta + simmeta
+    if(simmeta.mode == "SE") {      
+      """
+      biokanga align \
+      -i 1.fq.gz \
+      --sfx ${kangadb} \
+      --threads ${task.cpus} \
+      -o out.bam 
+      """
+    } else if(simmeta.mode == "PE"){
+      // r1 = file(metaAndReads[1][0])
+      // r2 = file(metaAndReads[1][1])
+      """
+      biokanga align \
+      -i 1.fq.gz \
+      -u 2.fq.gz \
+      --sfx ${kangadb} \
+      --threads ${task.cpus} \
+      -o out.bam \
+      --pemode 2 
+      """
+    }
+}
 
 
-// bowtie2dbsFeedback = Channel.create()
 process bowtie2align {
   label 'bowtie2'
   label 'samtools'
-
   tag {alignmeta}
+
   input:
-    // set val(simmeta), file("?.gz") from reads4bowtie2align
-    each metaAndReads from  reads4bowtie2align //tuple is: set val(meta0),val(simmeta),file("?.fq.gz") 
-    set val(dbmeta), file("*") from bowtie2dbs//.mix(bowtie2dbsFeedback)
-  
+    set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bowtie2align.combine(bowtie2dbs) //cartesian product i.e. all input sets of reads vs all dbs
+
   // output:
   //   set val(dbmeta), file("${dbBasename}.*") into bowtie2dbsFeedback //re-using same db multiple times
 
-  //TODO:dbBasename=getTagFromMeta(dbmeta)D when: condition to only align reads to the corresponding genome!
+  //only align reads to the corresponding genome!
+  when:
+    simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
 
   script:
-  dbBasename=getTagFromMeta(dbmeta)
-  simmeta = metaAndReads[0]
-  alignmeta = dbmeta + simmeta //.groupBy { it.id }.collect { it.value.collectEntries { it } }
-  if(simmeta.mode == 'SE') {
-    r1 = file(metaAndReads[1])
-    """
-    bowtie2 -x ${dbBasename} -U ${r1} -p ${task.cpus} | samtools view -bS > out.bam
-    """
-  } else {
-    r1 = file(metaAndReads[1][0])
-    r2 = file(metaAndReads[1][1])
-    """
-    bowtie2 -x ${dbBasename} -1 ${r1} -2 ${r2} -p ${task.cpus} | samtools view -bS > out.bam
-    """
-  }
+    dbBasename=getTagFromMeta(dbmeta)  
+    alignmeta = dbmeta + simmeta 
+    if(simmeta.mode == 'SE') {    
+      """
+      bowtie2 -x ${dbBasename} -U 1.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
+      """
+    } else {  
+      """
+      bowtie2 -x ${dbBasename} -1 1.fq.gz -2 2.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
+      """
+    }
 }
 
 /* 
