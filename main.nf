@@ -1,3 +1,11 @@
+import static groovy.json.JsonOutput.*
+/* 
+  Generic method for extracting a string tag or a file basename from a metadata map
+ */
+ def getTagFromMeta(meta, delim = '_') {
+  return meta.species+delim+meta.version+(trialLines == null ? "" : delim+trialLines+delim+"trialLines")
+}
+
 def helpMessage() {
     log.info"""
     =============================================================
@@ -72,8 +80,6 @@ process fetchRemoteReference {
 //Mix local and remote references then connect o multiple channels
 referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index } 
 
-// simulators = ["ArtIllumina", "DwgSim", "MasonIllumina", "WgSim"] //also CuReSim if SE only
-// reads4kangaAlign = Channel.create()
 process rnfSimReads {
   tag{simmeta}
   label 'rnftools'
@@ -133,7 +139,7 @@ process rnfSimReads {
 
 process kangaIndex {
   label 'biokanga'
-  tag{tag}
+  tag{dbmeta}
 
   input:
     set val(meta), file(ref) from references4kangaIndex
@@ -141,8 +147,7 @@ process kangaIndex {
   output:
     set val(dbmeta), file(kangadb) into kangadbs
 
-  script:
-    tag=getTagFromMeta(meta, ' ')
+  script:    
     dbmeta = ["species": meta.species, "version": meta.version]
     """
     biokanga index \
@@ -154,7 +159,8 @@ process kangaIndex {
 
 process bwaIndex {
   label 'bwa'
-  tag{tag}
+  tag{dbmeta}
+
   input:
     set val(meta), file(ref) from references4bwaIndex
 
@@ -162,7 +168,6 @@ process bwaIndex {
     set val(dbmeta), file("${ref}*") into bwadbs
 
   script:
-    tag=getTagFromMeta(meta, ' ')
     dbmeta = ["species": meta.species, "version": meta.version]
     """
     bwa index -a bwtsw ${ref}
@@ -171,7 +176,8 @@ process bwaIndex {
 
 process bowtie2Index {
   label 'bowtie2'
-  tag{tag}
+  tag{dbmeta}
+
   input:
     set val(meta), file(ref) from references4bowtie2Index
 
@@ -179,7 +185,6 @@ process bowtie2Index {
     set val(dbmeta), file("${basename}*") into bowtie2dbs
 
   script:
-    tag=getTagFromMeta(meta, ' ')
     basename=getTagFromMeta(meta)
     dbmeta = ["species": meta.species, "version": meta.version]
     """
@@ -195,12 +200,16 @@ process bwaAlign {
   input:    
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bwaAlign.combine(bwadbs) //cartesian product i.e. all input sets of reads vs all dbs
 
-  when:
+  output:
+    set val(alignmeta), file('out.bam') into bwaBAMs
+
+  when: //only align reads to the corresponding genome
     simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
 
   script:
     dbBasename=getTagFromMeta(dbmeta)
     alignmeta = dbmeta + simmeta
+    alignmeta.aligner = "bwa"
     if(simmeta.mode == 'SE') {
       """
       bwa mem ${dbBasename}.fasta 1.fq.gz | samtools view -bS > out.bam
@@ -219,22 +228,16 @@ process kangaAlign {
 
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file(kangadb) from reads4kangaAlign.combine(kangadbs) //cartesian product i.e. all input sets of reads vs all dbs
-    
-  //  output:
-  //   set val(dbmeta),file(kangadb) into kangadbsFeedback
-  //   set val(meta), val(tag), file("${tag}.bam") into kangaBAMs
+  
+  output:
+    set val(alignmeta), file('out.bam') into kangaBAMs
 
-  when:
+  when: //only align reads to the corresponding genome!
     simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
 
   script:
-    // meta = meta0.clone() //otherwise modifying orginal map, triggering re-runs with -resume
-    // meta.ref = dbmeta
-    // meta.aligner = "BioKanga"    
-    // simmeta = metaAndReads[0]
-    // basename = simmeta.tag+"_vs_"+dbmeta+".biokanga"
-    // tag = simmeta.toString()+" VS "+dbmeta 
     alignmeta = dbmeta + simmeta
+    alignmeta.aligner = "biokanga"
     if(simmeta.mode == "SE") {      
       """
       biokanga align \
@@ -244,8 +247,6 @@ process kangaAlign {
       -o out.bam 
       """
     } else if(simmeta.mode == "PE"){
-      // r1 = file(metaAndReads[1][0])
-      // r2 = file(metaAndReads[1][1])
       """
       biokanga align \
       -i 1.fq.gz \
@@ -258,7 +259,6 @@ process kangaAlign {
     }
 }
 
-
 process bowtie2align {
   label 'bowtie2'
   label 'samtools'
@@ -267,16 +267,16 @@ process bowtie2align {
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bowtie2align.combine(bowtie2dbs) //cartesian product i.e. all input sets of reads vs all dbs
 
-  // output:
-  //   set val(dbmeta), file("${dbBasename}.*") into bowtie2dbsFeedback //re-using same db multiple times
-
-  //only align reads to the corresponding genome!
-  when:
+  output:
+    set val(alignmeta), file('out.bam') into bowtie2BAMs
+  
+  when:  //only align reads to the corresponding genome!
     simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
 
   script:
     dbBasename=getTagFromMeta(dbmeta)  
     alignmeta = dbmeta + simmeta 
+    alignmeta.aligner = "bowtie2"
     if(simmeta.mode == 'SE') {    
       """
       bowtie2 -x ${dbBasename} -U 1.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
@@ -288,12 +288,102 @@ process bowtie2align {
     }
 }
 
-/* 
-  Generic method for extracting a string tag or a file basename from a metadata map
- */
- def getTagFromMeta(meta, delim = '_') {
-  return meta.species+delim+meta.version+(trialLines == null ? "" : delim+trialLines+delim+"trialLines")
+process rnfEvaluateBAM {
+  label 'rnftools'
+  tag{alignmeta}
+
+
+  input:
+    set val(alignmeta), file('out.bam') from bowtie2BAMs.mix(bwaBAMs).mix(kangaBAMs)
+
+  output:
+     set val(alignmeta), file(summary) into summaries 
+
+  script:
+  // println prettyPrint(toJson(alignmeta))
+  """
+  rnftools sam2es -i out.bam -o - | awk -vOFS="\t" '\$1 !~ /^#/ {category[\$7]++};END{for(k in category) {print k,category[k]}}' > summary
+  """
+
+// rnftools sam2es OUTPUT header
+// # RN:   read name
+// # Q:    is mapped with quality
+// # Chr:  chr id
+// # D:    direction
+// # L:    leftmost nucleotide
+// # R:    rightmost nucleotide
+// # Cat:  category of alignment assigned by LAVEnder
+// #         M_i    i-th segment is correctly mapped
+// #         m      segment should be unmapped but it is mapped
+// #         w      segment is mapped to a wrong location
+// #         U      segment is unmapped and should be unmapped
+// #         u      segment is unmapped and should be mapped
+// # Segs: number of segments
+// #
+// # RN    Q       Chr     D       L       R       Cat     Segs
 }
+
+
+// echo true
+// categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped", 
+//               "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location", 
+//               "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+// entries = Channel.create()
+// summaries.subscribe { meta, f ->
+//   entry = meta.clone()
+//   entry.results = [:]
+//   f.eachLine {  line -> 
+//     (k, v) = line.split()
+//     entry.results << [(k) : v ]
+//   }
+//   //println entry.results
+//   entries << entry
+// }
+// entries.subscribe{
+//   println it
+// }
+// println(prettyPrint(toJson(entries)))
+
+
+
+
+process collateResults {
+  // echo true
+
+  input:
+    val collected from summaries.collect()
+
+  exec:  
+  categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped", 
+  "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location", 
+  "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+  entry = null
+  entries = []
+  i=0;
+  collected.each {
+    if(i++ %2 == 0) {
+      if(entry != null) {
+        entries << entry
+      }
+      entry = it.clone()
+    } else {
+      entry.results = [:]
+      // println "Current: $it"
+      it.eachLine {  line -> 
+        (k, v) = line.split()
+        entry.results << [(k) : v ]
+      }
+    }
+  }
+  println("FINAL: "+entries)
+
+  // """
+  // echo 
+  // """
+
+}
+
+
 
 // /* 
 //   Generic method for merging read meta with db meta and aligner info
