@@ -1,5 +1,5 @@
 import static groovy.json.JsonOutput.*
-/* 
+/*
   Generic method for extracting a string tag or a file basename from a metadata map
  */
  def getTagFromMeta(meta, delim = '_') {
@@ -13,14 +13,14 @@ def helpMessage() {
     =============================================================
     Usage:
 
-    nextflow run csiro-crop-informatics/biokanga_align_paper 
+    nextflow run csiro-crop-informatics/biokanga_align_paper
 
     Default params:
     outdir      : ${params.outdir}
     publishmode : ${params.publishmode} [use 'copy' or 'move' if working across filesystems]
 
-    Input params:  
-    Please modify/specify in conf/input.config 
+    Input params:
+    Please modify/specify in conf/input.config
 
     Trials/debugging params:
     trialLines  : ${params.trialLines}  [specify an int to subset input for trials, debugging]
@@ -43,7 +43,7 @@ referencesRemote = Channel.create()
 params.references.each {
   //Abbreviate Genus_species name to G_species
   it.species = (it.species =~ /^./)[0]+(it.species =~ /_.*$/)[0]
-  //EXPECT TO HAVE SOME DATASETS WITH fasta  
+  //EXPECT TO HAVE SOME DATASETS WITH fasta
   if(it.containsKey("fasta")) {
     if((it.fasta).matches("^(https?|ftp)://.*\$")) {
       referencesRemote << it
@@ -64,21 +64,21 @@ process fetchRemoteReference {
     val(meta) from referencesRemote
 
   output:
-    set val(meta), file("${basename}.fasta") into referencesRemoteFasta    
+    set val(meta), file("${basename}.fasta") into referencesRemoteFasta
 
-  script:    
+  script:
     basename=getTagFromMeta(meta)
     //DECOMPRESS?
     cmd = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
     //TRIAL RUN? ONLY TAKE FIRST n LINES
-    cmd += trialLines != null ? "| head -n ${trialLines}" : ""    
+    cmd += trialLines != null ? "| head -n ${trialLines}" : ""
     """
     curl ${meta.fasta} ${cmd} > ${basename}.fasta
     """
 }
 
 //Mix local and remote references then connect o multiple channels
-referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index } 
+referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index }
 
 process rnfSimReads {
   tag{simmeta}
@@ -128,12 +128,12 @@ process rnfSimReads {
             ${dist}
             ${distDev}
             read_length_1=${len1},
-            read_length_2=${len2}            
+            read_length_2=${len2}
     )
     include: rnftools.include()
     rule: input: rnftools.input()
     " > Snakefile
-    snakemake && gzip --fast *.fq   
+    snakemake && gzip --fast *.fq
     """
 }
 
@@ -147,7 +147,7 @@ process kangaIndex {
   output:
     set val(dbmeta), file(kangadb) into kangadbs
 
-  script:    
+  script:
     dbmeta = ["species": meta.species, "version": meta.version]
     """
     biokanga index \
@@ -193,11 +193,11 @@ process bowtie2Index {
 }
 
 process bwaAlign {
-  label 'bwa'  
+  label 'bwa'
   label 'samtools'
   tag {alignmeta}
 
-  input:    
+  input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bwaAlign.combine(bwadbs) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
@@ -219,7 +219,7 @@ process bwaAlign {
       bwa mem ${dbBasename}.fasta 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
       """
     }
-      
+
 }
 
 process kangaAlign {
@@ -228,7 +228,7 @@ process kangaAlign {
 
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file(kangadb) from reads4kangaAlign.combine(kangadbs) //cartesian product i.e. all input sets of reads vs all dbs
-  
+
   output:
     set val(alignmeta), file('out.bam') into kangaBAMs
 
@@ -238,13 +238,13 @@ process kangaAlign {
   script:
     alignmeta = dbmeta + simmeta
     alignmeta.aligner = "biokanga"
-    if(simmeta.mode == "SE") {      
+    if(simmeta.mode == "SE") {
       """
       biokanga align \
       -i 1.fq.gz \
       --sfx ${kangadb} \
       --threads ${task.cpus} \
-      -o out.bam 
+      -o out.bam
       """
     } else if(simmeta.mode == "PE"){
       """
@@ -254,7 +254,7 @@ process kangaAlign {
       --sfx ${kangadb} \
       --threads ${task.cpus} \
       -o out.bam \
-      --pemode 2 
+      --pemode 2
       """
     }
 }
@@ -269,19 +269,19 @@ process bowtie2align {
 
   output:
     set val(alignmeta), file('out.bam') into bowtie2BAMs
-  
+
   when:  //only align reads to the corresponding genome!
     simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
 
   script:
-    dbBasename=getTagFromMeta(dbmeta)  
-    alignmeta = dbmeta + simmeta 
+    dbBasename=getTagFromMeta(dbmeta)
+    alignmeta = dbmeta + simmeta
     alignmeta.aligner = "bowtie2"
-    if(simmeta.mode == 'SE') {    
+    if(simmeta.mode == 'SE') {
       """
       bowtie2 -x ${dbBasename} -U 1.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
       """
-    } else {  
+    } else {
       """
       bowtie2 -x ${dbBasename} -1 1.fq.gz -2 2.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
       """
@@ -297,7 +297,7 @@ process rnfEvaluateBAM {
     set val(alignmeta), file('out.bam') from bowtie2BAMs.mix(bwaBAMs).mix(kangaBAMs)
 
   output:
-     set val(alignmeta), file(summary) into summaries 
+     set val(alignmeta), file(summary) into summaries
 
   script:
   // println prettyPrint(toJson(alignmeta))
@@ -325,14 +325,14 @@ process rnfEvaluateBAM {
 
 
 // echo true
-// categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped", 
-//               "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location", 
+// categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped",
+//               "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
 //               "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
 // entries = Channel.create()
 // summaries.subscribe { meta, f ->
 //   entry = meta.clone()
 //   entry.results = [:]
-//   f.eachLine {  line -> 
+//   f.eachLine {  line ->
 //     (k, v) = line.split()
 //     entry.results << [(k) : v ]
 //   }
@@ -353,9 +353,10 @@ process collateResults {
   input:
     val collected from summaries.collect()
 
-  exec:  
-  categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped", 
-  "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location", 
+  exec:
+  //def file = task.workDir.resolve('foo.txt'), then write to file?
+  categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped",
+  "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
   entry = null
   entries = []
@@ -369,25 +370,26 @@ process collateResults {
     } else {
       entry.results = [:]
       // println "Current: $it"
-      it.eachLine {  line -> 
+      it.eachLine { line ->
         (k, v) = line.split()
-        entry.results << [(k) : v ]
+        entry.results << [(categories[(k)]) : v ]
       }
     }
   }
   println("FINAL: "+entries)
+  println(prettyPrint(toJson(entries)))
 
   // """
-  // echo 
+  // echo
   // """
 
 }
 
 
 
-// /* 
+// /*
 //   Generic method for merging read meta with db meta and aligner info
 //  */
 //  def getAlignMeta(meta, dbmeta) {
-//   return (meta + dbmeta) //.aligner = 
+//   return (meta + dbmeta) //.aligner =
 // }
