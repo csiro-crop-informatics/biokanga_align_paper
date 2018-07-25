@@ -352,9 +352,12 @@ process collateResults {
 
   input:
     val collected from summaries.collect()
+  
+  output:
+    file '*'
 
   exec:
-  //def file = task.workDir.resolve('foo.txt'), then write to file?
+  def outfile = task.workDir.resolve('results.json')
   categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
@@ -376,8 +379,8 @@ process collateResults {
       }
     }
   }
-  println("FINAL: "+entries)
-  println(prettyPrint(toJson(entries)))
+  // println("FINAL: "+entries)
+  outfile << prettyPrint(toJson(entries))
 
   // """
   // echo
