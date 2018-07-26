@@ -22,6 +22,8 @@ def helpMessage() {
     Input params:
     Please modify/specify in conf/input.config
 
+    nreads  : ${params.simreads.nreads}  
+
     Trials/debugging params:
     trialLines  : ${params.trialLines}  [specify an int to subset input for trials, debugging]
 
@@ -195,6 +197,7 @@ process bowtie2Index {
 process bwaAlign {
   label 'bwa'
   label 'samtools'
+  label 'align'
   tag {alignmeta}
 
   input:
@@ -212,11 +215,11 @@ process bwaAlign {
     alignmeta.aligner = "bwa"
     if(simmeta.mode == 'SE') {
       """
-      bwa mem ${dbBasename}.fasta 1.fq.gz | samtools view -bS > out.bam
+      bwa mem -t ${task.cpus} ${dbBasename}.fasta 1.fq.gz | samtools view -bS > out.bam
       """
     } else {
       """
-      bwa mem ${dbBasename}.fasta 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
+      bwa mem -t ${task.cpus} ${dbBasename}.fasta 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
       """
     }
 
@@ -224,6 +227,7 @@ process bwaAlign {
 
 process kangaAlign {
   label 'biokanga'
+  label 'align'
   tag {alignmeta}
 
   input:
@@ -262,6 +266,7 @@ process kangaAlign {
 process bowtie2align {
   label 'bowtie2'
   label 'samtools'
+  label 'align'
   tag {alignmeta}
 
   input:
@@ -279,11 +284,11 @@ process bowtie2align {
     alignmeta.aligner = "bowtie2"
     if(simmeta.mode == 'SE') {
       """
-      bowtie2 -x ${dbBasename} -U 1.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
+      bowtie2 -p ${task.cpus}  -x ${dbBasename} -U 1.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
       """
     } else {
       """
-      bowtie2 -x ${dbBasename} -1 1.fq.gz -2 2.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
+      bowtie2 -p ${task.cpus} -x ${dbBasename} -1 1.fq.gz -2 2.fq.gz -p ${task.cpus} | samtools view -bS > out.bam
       """
     }
 }
