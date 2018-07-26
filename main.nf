@@ -135,7 +135,16 @@ process rnfSimReads {
     include: rnftools.include()
     rule: input: rnftools.input()
     " > Snakefile
-    snakemake && gzip --fast *.fq
+    snakemake \
+    && for f in *.fq; do \
+      paste - - - - < \${f} \
+      | awk '{gsub("[^ACGTUacgtu]","N",\$2); print}' \
+      | tr '\\t' '\\n' \
+      | gzip --stdout  --fast \
+      > \${f}.gz \
+      && rm \${f}; 
+    done \
+    && find . -type d -mindepth 2 | xargs rm -r
     """
 }
 
