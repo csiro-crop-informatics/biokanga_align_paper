@@ -213,6 +213,10 @@ process bwaAlign {
   label 'align'
   tag {alignmeta}
 
+// no switch for soft clipping, but perhaps could set -L very high to disable: 
+// -L INT	Clipping penalty. When performing SW extension, BWA-MEM keeps track of the best score reaching the end of query. 
+// If this score is larger than the best SW score minus the clipping penalty, clipping will not be applied. 
+
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bwaAlign.combine(bwadbs) //cartesian product i.e. all input sets of reads vs all dbs
 
@@ -242,6 +246,9 @@ process kangaAlign {
   label 'biokanga'
   label 'align'
   tag {alignmeta}
+
+ // params to explore: 2-3MM, indels, chimeric trimming
+
 
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file(kangadb) from reads4kangaAlign.combine(kangadbs) //cartesian product i.e. all input sets of reads vs all dbs
@@ -281,6 +288,8 @@ process bowtie2align {
   label 'samtools'
   label 'align'
   tag {alignmeta}
+
+  //explore parameter space: --local vs --end-to-end (default)
 
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bowtie2align.combine(bowtie2dbs) //cartesian product i.e. all input sets of reads vs all dbs
@@ -375,17 +384,22 @@ process collateResults {
     file '*'
 
   exec:
-  def outfile = task.workDir.resolve('results.json')
+  def outfileJSON = task.workDir.resolve('results.json')
+  def outfileTSV = task.workDir.resolve('results.tsv')
   categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
   entry = null
   entries = []
   i=0;
+  TreeSet headers = []
   collected.each {
     if(i++ %2 == 0) {
       if(entry != null) {
         entries << entry
+        entry.each {k,v ->
+          headers << k
+        }
       }
       entry = it.clone()
     } else {
@@ -393,13 +407,31 @@ process collateResults {
       // println "Current: $it"
       it.eachLine { line ->
         (k, v) = line.split()
-        entry.results << [(categories[(k)]) : v ]
+        // entry.results << [(categories[(k)]) : v ]
+        entry << [(k) : v ]
+        headers << (k)
       }
     }
   }
-  // println("FINAL: "+entries)
-  outfile << prettyPrint(toJson(entries))
+  
+  // println("FINAL: "+headers.join("\t"))
+  outfileTSV << headers.join("\t")
 
+  // println(prettyPrint(entries))
+
+  entries.each {entry
+    String s = ""    
+    // headers.each {k,v ->
+    //   println(entry[k])
+    // }
+    // outfileTSV << s
+  }
+  outfileJSON << prettyPrint(toJson(entries))
+
+
+  // entries.each {k, v
+
+  // }
   // """
   // echo
   // """
