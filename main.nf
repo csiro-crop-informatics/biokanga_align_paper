@@ -162,7 +162,7 @@ process kangaIndex {
     dbmeta = ["species": meta.species, "version": meta.version]
     """
     biokanga index \
-    --threads ${task.cpus}
+    --threads ${task.cpus} \
     -i ${ref} \
     -o kangadb \
     --ref ${ref}
