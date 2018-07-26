@@ -150,6 +150,7 @@ process rnfSimReads {
 
 process kangaIndex {
   label 'biokanga'
+  label 'index'
   tag{dbmeta}
 
   input:
@@ -171,6 +172,7 @@ process kangaIndex {
 
 process bwaIndex {
   label 'bwa'
+  label 'index'
   tag{dbmeta}
 
   input:
@@ -188,6 +190,7 @@ process bwaIndex {
 
 process bowtie2Index {
   label 'bowtie2'
+  label 'index'
   tag{dbmeta}
 
   input:
