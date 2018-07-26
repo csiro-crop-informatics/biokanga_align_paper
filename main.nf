@@ -138,7 +138,7 @@ process rnfSimReads {
     snakemake \
     && for f in *.fq; do \
       paste - - - - < \${f} \
-      | awk '{gsub("[^ACGTUacgtu]","N",\$2); print}' \
+      | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
       | tr '\\t' '\\n' \
       | gzip --stdout  --fast \
       > \${f}.gz \
