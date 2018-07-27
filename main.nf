@@ -375,13 +375,13 @@ process rnfEvaluateBAM {
 
 
 process collateResults {
-  // echo true
+  label 'stats'
 
   input:
     val collected from summaries.collect()
   
   output:
-    file '*'
+    file '*' into collatedResults
 
   exec:
   def outfileJSON = task.workDir.resolve('results.json')
@@ -392,52 +392,81 @@ process collateResults {
   entry = null
   entries = []
   i=0;
-  TreeSet headers = []
+  TreeSet headersMeta = []
+  TreeSet headersResults = []
   collected.each {
     if(i++ %2 == 0) {
       if(entry != null) {
         entries << entry
-        entry.each {k,v ->
-          headers << k
+        entry.meta.each {k,v ->
+          headersMeta << k
         }
       }
-      entry = it.clone()
+      entry = [:]
+      entry.meta = it.clone()
     } else {
       entry.results = [:]
       // println "Current: $it"
       it.eachLine { line ->
         (k, v) = line.split()
+        entry.results << [(k) : v ]
         // entry.results << [(categories[(k)]) : v ]
-        entry << [(k) : v ]
-        headers << (k)
+        // entry << [(k) : v ]
+        headersResults << (k)
       }
     }
   }
-  
-  // println("FINAL: "+headers.join("\t"))
-  outfileTSV << headers.join("\t")
 
-  // println(prettyPrint(entries))
-
-  entries.each {entry
-    String s = ""    
-    // headers.each {k,v ->
-    //   println(entry[k])
-    // }
-    // outfileTSV << s
-  }
   outfileJSON << prettyPrint(toJson(entries))
 
-
-  // entries.each {k, v
-
-  // }
-  // """
-  // echo
-  // """
+  SEP="\t"
+  outfileTSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  entries.each { entry ->
+    line = ""
+    headersMeta.each { k ->
+      line += line == "" ? (entry.meta[k]) : (SEP+entry.meta[k])
+    }
+    headersResults.each { k ->
+      value = entry.results[k]
+      line += value == null ? SEP+0 : SEP+value //NOT QUITE RIGHT, ok for 'w' not for 'u'
+    }
+    outfileTSV << line+"\n"
+  }
 
 }
 
+
+process generatePlots {
+  label 'Rscript'
+  label 'figures'
+
+  input:
+    file '*' from collatedResults
+
+  output:
+    file '*'
+  
+  script:
+  '''
+  #!/usr/bin/env Rscript
+
+  #args <- commandArgs(TRUE)
+  #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  if(!require(reshape2)){
+    install.packages("reshape2")
+    library(reshape2)
+  }
+  if(!require(ggplot2)){
+    install.packages("ggplot2")
+    library(ggplot2)
+  }
+  res<-read.table("results.tsv", header=TRUE, sep="\t");
+  res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
+  pdf(file="results.pdf", width=8.5, height=11);
+  ggplot(res2, aes(x=aligner, y=value,fill=variable))+geom_bar(stat="identity",position = position_stack(reverse = TRUE))+ facet_grid(simulator~mode);
+  dev.off();
+  '''
+}
 
 
 // /*
