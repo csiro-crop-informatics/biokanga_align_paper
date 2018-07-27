@@ -184,7 +184,7 @@ process bwaIndex {
   script:
     dbmeta = ["species": meta.species, "version": meta.version]
     """
-    bwa index -a bwtsw ${ref}
+    bwa index -a bwtsw -b 1000000000 ${ref}
     """
 }
 
@@ -203,7 +203,7 @@ process bowtie2Index {
     basename=getTagFromMeta(meta)
     dbmeta = ["species": meta.species, "version": meta.version]
     """
-    bowtie2-build ${ref} ${basename}
+    bowtie2-build --threads ${task.cpus} ${ref} ${basename}
     """
 }
 
