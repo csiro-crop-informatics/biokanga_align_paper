@@ -437,7 +437,7 @@ process collateResults {
 
 
 process generatePlots {
-  label 'Rscript'
+  label 'rscript'
   label 'figures'
 
   input:
