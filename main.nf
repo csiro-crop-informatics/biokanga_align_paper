@@ -487,7 +487,7 @@ process generatePlots {
    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) + 
    coord_flip() + 
    theme(legend.position = "top") + 
-   facet_grid(simulator~mode);
+   facet_grid(simulator~mode~species);
   dev.off();
   '''
 }
