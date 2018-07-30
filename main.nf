@@ -82,12 +82,29 @@ process fetchRemoteReference {
 //Mix local and remote references then connect o multiple channels
 referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index }
 
+
+process indexReferences4rnfSimReads {
+  tag{meta}
+  label 'samtools'
+
+  input:
+    set val(meta), file(ref) from references4rnfSimReads
+  
+  output:
+    set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
+  
+  script:
+  """
+  samtools faidx ${ref}
+  """
+}
+
 process rnfSimReads {
   tag{simmeta}
   label 'rnftools'
 
   input:
-    set val(meta), file(ref) from references4rnfSimReads
+    set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
     each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
     each length from params.simreads.length.toString().tokenize(",")*.toInteger()
     each simulator from params.simreads.simulator
@@ -122,6 +139,7 @@ process rnfSimReads {
       distDev=""
     }
     """
+    ls -lh
     echo "import rnftools
     rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
     rnftools.mishmash.${simulator}(
@@ -179,12 +197,13 @@ process bwaIndex {
     set val(meta), file(ref) from references4bwaIndex
 
   output:
-    set val(dbmeta), file("${ref}*") into bwadbs
+    set val(dbmeta), file("${basename}*") into bwadbs
 
   script:
     dbmeta = ["species": meta.species, "version": meta.version]
+    basename = getTagFromMeta(meta)
     """
-    bwa index -a bwtsw -b 1000000000 ${ref}
+    bwa index -a bwtsw -b 1000000000 -p ${basename}  ${ref}
     """
 }
 
@@ -232,11 +251,11 @@ process bwaAlign {
     alignmeta.aligner = "bwa"
     if(simmeta.mode == 'SE') {
       """
-      bwa mem -t ${task.cpus} ${dbBasename}.fasta 1.fq.gz | samtools view -bS > out.bam
+      bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz | samtools view -bS > out.bam
       """
     } else {
       """
-      bwa mem -t ${task.cpus} ${dbBasename}.fasta 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
+      bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
       """
     }
 
@@ -395,7 +414,7 @@ process collateResults {
   TreeSet headersMeta = []
   TreeSet headersResults = []
   collected.each {
-    if(i++ %2 == 0) {
+    if(i++ %2 == 0) {      
       if(entry != null) {
         entries << entry
         entry.meta.each {k,v ->
@@ -406,7 +425,6 @@ process collateResults {
       entry.meta = it.clone()
     } else {
       entry.results = [:]
-      // println "Current: $it"
       it.eachLine { line ->
         (k, v) = line.split()
         entry.results << [(k) : v ]
@@ -416,6 +434,7 @@ process collateResults {
       }
     }
   }
+  entries << entry
 
   outfileJSON << prettyPrint(toJson(entries))
 
@@ -462,8 +481,12 @@ process generatePlots {
   }
   res<-read.table("results.tsv", header=TRUE, sep="\t");
   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-  pdf(file="results.pdf", width=8.5, height=11);
-  ggplot(res2, aes(x=aligner, y=value,fill=variable))+geom_bar(stat="identity",position = position_stack(reverse = TRUE))+ facet_grid(simulator~mode);
+  pdf(file="results.pdf", width=11, height=8.5);
+   ggplot(res2, aes(x=aligner, y=value,fill=variable)) + 
+   geom_bar(stat="identity",position = position_stack(reverse = TRUE)) + 
+   coord_flip() + 
+   theme(legend.position = "top") + 
+   facet_grid(simulator~mode);
   dev.off();
   '''
 }
