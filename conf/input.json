@@ -1,11 +1,9 @@
 {
   "simreads": {
     "simulator": [
-      "ArtIllumina",
-      "CuReSim",
+      "ArtIllumina",    
       "DwgSim",
-      "MasonIllumina",
-      "WgSim"
+      "MasonIllumina"
     ],
     "nreads": 10000,
     "length": 100,
