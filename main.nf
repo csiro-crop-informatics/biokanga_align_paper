@@ -395,6 +395,7 @@ process rnfEvaluateBAM {
 
 process collateResults {
   label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
   input:
     val collected from summaries.collect()
