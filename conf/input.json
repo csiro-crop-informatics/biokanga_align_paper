@@ -2,10 +2,9 @@
   "simreads": {
     "simulator": [
       "ArtIllumina",    
-      "DwgSim",
       "MasonIllumina"
     ],
-    "nreads": 10000,
+    "nreads": 100000,
     "length": 100,
     "mode": [
       "SE",
