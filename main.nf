@@ -278,6 +278,10 @@ process kangaAlign {
   when: //only align reads to the corresponding genome!
     simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
 
+    //todo:EXPLORE PARAM SPACE
+      // --microindellen 9 \
+      // --minchimeric 50 \
+
   script:
     alignmeta = dbmeta + simmeta
     alignmeta.aligner = "biokanga"
@@ -406,7 +410,7 @@ process collateResults {
   exec:
   def outfileJSON = task.workDir.resolve('results.json')
   def outfileTSV = task.workDir.resolve('results.tsv')
-  categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped",
+  categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
   entry = null
@@ -428,10 +432,10 @@ process collateResults {
       entry.results = [:]
       it.eachLine { line ->
         (k, v) = line.split()
-        entry.results << [(k) : v ]
-        // entry.results << [(categories[(k)]) : v ]
-        // entry << [(k) : v ]
-        headersResults << (k)
+        //entry.results << [(k) : v ]
+        entry.results << [(categories[(k)]) : v ]
+        // headersResults << (k)
+        headersResults << (categories[(k)])
       }
     }
   }
@@ -482,7 +486,7 @@ process generatePlots {
   }
   res<-read.table("results.tsv", header=TRUE, sep="\t");
   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-  pdf(file="results.pdf", width=11, height=8.5);
+  pdf(file="results.pdf", width=16, height=9);
    ggplot(res2, aes(x=aligner, y=value,fill=variable)) + 
    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) + 
    coord_flip() + 
