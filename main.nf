@@ -20,9 +20,11 @@ def helpMessage() {
     publishmode : ${params.publishmode} [use 'copy' or 'move' if working across filesystems]
 
     Input params:
-    Please modify/specify in conf/input.config
+    Default settings and input specification suitable for test runs are read from conf/input.config
+    Full pipeline run is triggered when executed with -params-file conf/input.json
 
-    nreads  : ${params.simreads.nreads}  
+
+
 
     Trials/debugging params:
     trialLines  : ${params.trialLines}  [specify an int to subset input for trials, debugging]
@@ -89,10 +91,10 @@ process indexReferences4rnfSimReads {
 
   input:
     set val(meta), file(ref) from references4rnfSimReads
-  
+
   output:
     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
-  
+
   script:
   """
   samtools faidx ${ref}
@@ -139,7 +141,6 @@ process rnfSimReads {
       distDev=""
     }
     """
-    ls -lh
     echo "import rnftools
     rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
     rnftools.mishmash.${simulator}(
@@ -160,7 +161,7 @@ process rnfSimReads {
       | tr '\\t' '\\n' \
       | gzip --stdout  --fast \
       > \${f}.gz \
-      && rm \${f}; 
+      && rm \${f};
     done \
     && find . -type d -mindepth 2 | xargs rm -r
     """
@@ -232,9 +233,9 @@ process bwaAlign {
   label 'align'
   tag {alignmeta}
 
-// no switch for soft clipping, but perhaps could set -L very high to disable: 
-// -L INT	Clipping penalty. When performing SW extension, BWA-MEM keeps track of the best score reaching the end of query. 
-// If this score is larger than the best SW score minus the clipping penalty, clipping will not be applied. 
+// no switch for soft clipping, but perhaps could set -L very high to disable:
+// -L INT	Clipping penalty. When performing SW extension, BWA-MEM keeps track of the best score reaching the end of query.
+// If this score is larger than the best SW score minus the clipping penalty, clipping will not be applied.
 
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bwaAlign.combine(bwadbs) //cartesian product i.e. all input sets of reads vs all dbs
@@ -373,37 +374,13 @@ process rnfEvaluateBAM {
 // # RN    Q       Chr     D       L       R       Cat     Segs
 }
 
-
-// echo true
-// categories = ["M_1":"1-st segment is correctly mapped", "M_2":"2-nd segment is correctly mapped",
-//               "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
-//               "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
-// entries = Channel.create()
-// summaries.subscribe { meta, f ->
-//   entry = meta.clone()
-//   entry.results = [:]
-//   f.eachLine {  line ->
-//     (k, v) = line.split()
-//     entry.results << [(k) : v ]
-//   }
-//   //println entry.results
-//   entries << entry
-// }
-// entries.subscribe{
-//   println it
-// }
-// println(prettyPrint(toJson(entries)))
-
-
-
-
 process collateResults {
   label 'stats'
   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
   input:
     val collected from summaries.collect()
-  
+
   output:
     file '*' into collatedResults
 
@@ -419,7 +396,7 @@ process collateResults {
   TreeSet headersMeta = []
   TreeSet headersResults = []
   collected.each {
-    if(i++ %2 == 0) {      
+    if(i++ %2 == 0) {
       if(entry != null) {
         entries << entry
         entry.meta.each {k,v ->
@@ -443,6 +420,7 @@ process collateResults {
 
   outfileJSON << prettyPrint(toJson(entries))
 
+  //GENERATE TSV OUTPUT
   SEP="\t"
   outfileTSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
   entries.each { entry ->
@@ -469,7 +447,7 @@ process generatePlots {
 
   output:
     file '*'
-  
+
   script:
   '''
   #!/usr/bin/env Rscript
@@ -487,10 +465,10 @@ process generatePlots {
   res<-read.table("results.tsv", header=TRUE, sep="\t");
   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
   pdf(file="results.pdf", width=16, height=9);
-   ggplot(res2, aes(x=aligner, y=value,fill=variable)) + 
-   geom_bar(stat="identity",position = position_stack(reverse = TRUE)) + 
-   coord_flip() + 
-   theme(legend.position = "top") + 
+   ggplot(res2, aes(x=aligner, y=value,fill=variable)) +
+   geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
+   coord_flip() +
+   theme(legend.position = "top") +
    facet_grid(simulator~mode~species);
   dev.off();
   '''
