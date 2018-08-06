@@ -233,10 +233,6 @@ process bwaAlign {
   label 'align'
   tag {alignmeta}
 
-// no switch for soft clipping, but perhaps could set -L very high to disable:
-// -L INT	Clipping penalty. When performing SW extension, BWA-MEM keeps track of the best score reaching the end of query.
-// If this score is larger than the best SW score minus the clipping penalty, clipping will not be applied.
-
   input:
     set val(simmeta), file("?.fq.gz"), val(dbmeta), file('*') from reads4bwaAlign.combine(bwadbs) //cartesian product i.e. all input sets of reads vs all dbs
 
@@ -259,6 +255,10 @@ process bwaAlign {
       bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
       """
     }
+
+// no switch for soft clipping, but perhaps could set -L very high to disable:
+// -L INT	Clipping penalty. When performing SW extension, BWA-MEM keeps track of the best score reaching the end of query.
+// If this score is larger than the best SW score minus the clipping penalty, clipping will not be applied.
 
 }
 
@@ -349,11 +349,17 @@ process rnfEvaluateBAM {
 
   output:
      set val(alignmeta), file(summary) into summaries
+     set val(alignmeta), file(detail) into details
 
   script:
   // println prettyPrint(toJson(alignmeta))
   """
-  rnftools sam2es -i out.bam -o - | awk -vOFS="\t" '\$1 !~ /^#/ {category[\$7]++};END{for(k in category) {print k,category[k]}}' > summary
+  paste \
+    <( rnftools sam2es -i out.bam -o - | awk '\$1 !~ /^#/' \
+      | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
+    ) \
+    <( samtools view out.bam ) \
+  | awk -vOFS="\\t" '{print \$11,\$12,\$7}' > detail
   """
 
 // rnftools sam2es OUTPUT header
@@ -374,7 +380,38 @@ process rnfEvaluateBAM {
 // # RN    Q       Chr     D       L       R       Cat     Segs
 }
 
-process collateResults {
+process collateDetails {
+  label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+
+  input:
+    val collected from details.collect()
+
+  output:
+    file 'details.tsv' into collatedDetails
+
+  exec:
+  def outfileTSV = task.workDir.resolve('details.tsv')
+  i = 0;
+  sep = "\t"
+  header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
+  outfileTSV << header
+  collected.each {
+    if(i++ %2 == 0) {
+      meta = it
+    } else {
+      common = meta.simulator+sep+meta.aligner+sep+meta.mode+"\n"
+      it.eachLine { line ->
+        outfileTSV << meta.species+sep+line+sep+common
+      }
+    }
+  }
+
+
+
+}
+
+process collateSummaries {
   label 'stats'
   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
@@ -382,11 +419,11 @@ process collateResults {
     val collected from summaries.collect()
 
   output:
-    file '*' into collatedResults
+    file 'summaries.*' into collatedSummaries
 
   exec:
-  def outfileJSON = task.workDir.resolve('results.json')
-  def outfileTSV = task.workDir.resolve('results.tsv')
+  def outfileJSON = task.workDir.resolve('summaries.json')
+  def outfileTSV = task.workDir.resolve('summaries.tsv')
   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
@@ -438,12 +475,12 @@ process collateResults {
 }
 
 
-process generatePlots {
+process plotDetail {
   label 'rscript'
   label 'figures'
 
   input:
-    file '*' from collatedResults
+    file '*' from collatedDetails
 
   output:
     file '*'
@@ -462,9 +499,42 @@ process generatePlots {
     install.packages("ggplot2")
     library(ggplot2)
   }
-  res<-read.table("results.tsv", header=TRUE, sep="\t");
+  res<-read.table("details.tsv", header=TRUE, sep="\t");
+  pdf(file="details.pdf", width=16, height=9);
+    ggplot(res, aes(x=Position,colour=Class, fill=Class)) +
+      geom_density(alpha=0.1, adjust=1/10) +
+      facet_grid(Species~Chromosome~Simulator~Aligner);
+  dev.off();
+  '''
+}
+
+process plotSummary {
+  label 'rscript'
+  label 'figures'
+
+  input:
+    file '*' from collatedSummaries
+
+  output:
+    file '*'
+
+  script:
+  '''
+  #!/usr/bin/env Rscript
+
+  #args <- commandArgs(TRUE)
+  #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  if(!require(reshape2)){
+    install.packages("reshape2")
+    library(reshape2)
+  }
+  if(!require(ggplot2)){
+    install.packages("ggplot2")
+    library(ggplot2)
+  }
+  res<-read.table("summaries.tsv", header=TRUE, sep="\t");
   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-  pdf(file="results.pdf", width=16, height=9);
+  pdf(file="summaries.pdf", width=16, height=9);
    ggplot(res2, aes(x=aligner, y=value,fill=variable)) +
    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
    coord_flip() +
