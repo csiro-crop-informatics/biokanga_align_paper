@@ -503,7 +503,7 @@ process plotDetail {
   pdf(file="details.pdf", width=16, height=9);
     ggplot(res, aes(x=Position,colour=Class, fill=Class)) +
       geom_density(alpha=0.1, adjust=1/10) +
-      facet_grid(Species~Chromosome~Simulator~Aligner);
+      facet_grid(Species~Chromosome~Simulator~Aligner~Mode);
   dev.off();
   '''
 }
