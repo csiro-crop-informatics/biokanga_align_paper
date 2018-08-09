@@ -395,20 +395,29 @@ process collateDetails {
   i = 0;
   sep = "\t"
   header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
-  outfileTSV << header
-  collected.each {
-    if(i++ %2 == 0) {
-      meta = it
-    } else {
-      common = meta.simulator+sep+meta.aligner+sep+meta.mode+"\n"
-      it.eachLine { line ->
-        outfileTSV << meta.species+sep+line+sep+common
+  // outfileTSV << header
+  outfileTSV.withWriter { target ->
+    target << header
+    collected.each {
+      if(i++ %2 == 0) {
+        meta = it
+      } else {
+        common = meta.simulator+sep+meta.aligner+sep+meta.mode+"\n"
+        it.withReader { source ->
+          String line
+          while( line=source.readLine() ) {
+            StringBuilder sb = new StringBuilder()
+            sb.append(meta.species).append(sep).append(line).append(sep).append(common)
+            target << sb
+            // target << meta.species+sep+line+sep+common
+          }
+        }
       }
+      // it.eachLine { line ->
+      //   outfileTSV << meta.species+sep+line+sep+common
+      // }
     }
   }
-
-
-
 }
 
 process collateSummaries {
