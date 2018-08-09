@@ -228,8 +228,8 @@ process bowtie2Index {
 }
 
 process bwaAlign {
-  label 'bwa'
   label 'samtools'
+  label 'bwa'
   label 'align'
   tag {alignmeta}
 
@@ -308,8 +308,8 @@ process kangaAlign {
 }
 
 process bowtie2align {
-  label 'bowtie2'
   label 'samtools'
+  label 'bowtie2'
   label 'align'
   tag {alignmeta}
 
