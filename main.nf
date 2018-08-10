@@ -499,59 +499,77 @@ process plotDetail {
   #!/usr/bin/env Rscript
 
   #args <- commandArgs(TRUE)
-  #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-  if(!require(reshape2)){
-    install.packages("reshape2")
-    library(reshape2)
+  location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  #if(!require(reshape2)){
+  #  install.packages("reshape2")
+  #  library(reshape2)
+  #}
+  #if(!require(ggplot2)){
+  #  install.packages("ggplot2")
+  #  library(ggplot2)
+  #}
+  if(!require(tidyverse)){
+    install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+    library(tidyverse) #, lib.loc = location)
   }
-  if(!require(ggplot2)){
-    install.packages("ggplot2")
-    library(ggplot2)
-  }
-  res<-read.table("details.tsv", header=TRUE, sep="\t");
-  pdf(file="details.pdf", width=16, height=9);
-    ggplot(res, aes(x=Position,colour=Class, fill=Class)) +
-      geom_density(alpha=0.1, adjust=1/10) +
-      facet_grid(Species~Chromosome~Simulator~Aligner~Mode);
+  #res<-read.delim(gzfile("details.tsv.gz"));
+  details<-read.delim("details.tsv");
+
+pdf(file="details.pdf", width=16, height=9);
+binWidth = 1E6
+ details %>%
+   filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
+   #filter(Chromosome %in% c("chr2D")) %>%
+   #filter(Class %in% c("w")) %>%
+   ggplot(aes(Position, y=..count.., fill=Class)) +
+   geom_density(alpha=0.1, bw = binWidth) +
+   #geom_vline(xintercept = c(peak), colour="red", linetype="longdash", size=0.5) +
+   facet_grid(Species~Aligner~Chromosome~Mode)
+
+
+
+    #ggplot(res, aes(x=Position,colour=Class, fill=Class)) +
+    #  geom_density(alpha=0.1, adjust=1/10) +
+    #  facet_grid(Species~Chromosome~Simulator~Aligner~Mode);
   dev.off();
   '''
 }
 
-process plotSummary {
-  label 'rscript'
-  label 'figures'
+// process plotSummary {
+//   label 'rscript'
+//   label 'figures'
 
-  input:
-    file '*' from collatedSummaries
+//   input:
+//     file '*' from collatedSummaries
 
-  output:
-    file '*'
+//   output:
+//     file '*'
 
-  script:
-  '''
-  #!/usr/bin/env Rscript
+//   script:
+//   '''
+//   #!/usr/bin/env Rscript
 
-  #args <- commandArgs(TRUE)
-  #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-  if(!require(reshape2)){
-    install.packages("reshape2")
-    library(reshape2)
-  }
-  if(!require(ggplot2)){
-    install.packages("ggplot2")
-    library(ggplot2)
-  }
-  res<-read.table("summaries.tsv", header=TRUE, sep="\t");
-  res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-  pdf(file="summaries.pdf", width=16, height=9);
-   ggplot(res2, aes(x=aligner, y=value,fill=variable)) +
-   geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
-   coord_flip() +
-   theme(legend.position = "top") +
-   facet_grid(simulator~mode~species);
-  dev.off();
-  '''
-}
+//   #args <- commandArgs(TRUE)
+//   #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+//   if(!require(reshape2)){
+//     install.packages("reshape2")
+//     library(reshape2)
+//   }
+//   if(!require(ggplot2)){
+//     install.packages("ggplot2")
+//     library(ggplot2)
+//   }
+//   res<-read.delim("summaries.tsv");
+//   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
+//   pdf(file="summaries.pdf", width=16, height=9);
+//    ggplot(res2, aes(x=aligner, y=value,fill=variable)) +
+//    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
+//    coord_flip() +
+//    theme(legend.position = "top") +
+//    facet_grid(simulator~mode~species);
+//   dev.off();
+//   '''
+// }
 
 
 // /*
