@@ -495,7 +495,8 @@ process plotDetail {
     file '*'
 
   script:
-  '''
+  binWidth='1E5'
+  """
   #!/usr/bin/env Rscript
 
   #args <- commandArgs(TRUE)
@@ -516,13 +517,13 @@ process plotDetail {
   details<-read.delim("details.tsv");
 
 pdf(file="details.pdf", width=16, height=9);
-binWidth = 1E6
+binWidth = ${binWidth}
  details %>%
-   filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
+   #filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
    #filter(Chromosome %in% c("chr2D")) %>%
    #filter(Class %in% c("w")) %>%
-   ggplot(aes(Position, y=..count.., fill=Class)) +
-   geom_density(alpha=0.1, bw = binWidth) +
+   ggplot(aes(Position, fill=Class)) +
+   geom_density(alpha=0.1, bw = ${binWidth}) +
    #geom_vline(xintercept = c(peak), colour="red", linetype="longdash", size=0.5) +
    facet_grid(Species~Aligner~Chromosome~Mode)
 
@@ -532,7 +533,19 @@ binWidth = 1E6
     #  geom_density(alpha=0.1, adjust=1/10) +
     #  facet_grid(Species~Chromosome~Simulator~Aligner~Mode);
   dev.off();
-  '''
+
+pdf(file="details7.pdf", width=16, height=9);
+  details %>%
+   # filter(Species %in% c("T_aestivum")) %>% head()
+   # filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
+   # filter(str_detect(Chromosome, "^chr1")) %>%
+    filter(!Class %in% c("u")) %>%
+    filter(Simulator %in% c("MasonIllumina")) %>%
+  ggplot(aes(x=Position, fill = Class, colour=Class)) +
+    geom_density(aes(x=Position, y=..count..*${binWidth}), alpha=0.1, bw = ${binWidth}) +
+    facet_grid(Species ~ Chromosome ~ Aligner  ~ Mode)
+dev.off();
+  """
 }
 
 // process plotSummary {
