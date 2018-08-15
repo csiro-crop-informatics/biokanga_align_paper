@@ -359,7 +359,7 @@ process rnfEvaluateBAM {
       | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
     ) \
     <( samtools view out.bam ) \
-  | awk -vOFS="\\t" '{print \$11,\$12,\$7}' > detail
+  | awk -vOFS="\\t" 'if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating\n"$0 > error; exit 1}' > detail
   """
 
 // rnftools sam2es OUTPUT header
@@ -501,14 +501,6 @@ process plotDetail {
 
   #args <- commandArgs(TRUE)
   location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-  #if(!require(reshape2)){
-  #  install.packages("reshape2")
-  #  library(reshape2)
-  #}
-  #if(!require(ggplot2)){
-  #  install.packages("ggplot2")
-  #  library(ggplot2)
-  #}
   if(!require(tidyverse)){
     install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
     library(tidyverse) #, lib.loc = location)
