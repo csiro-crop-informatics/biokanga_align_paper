@@ -535,7 +535,7 @@ pdf(file="details7.pdf", width=16, height=9);
     filter(Simulator %in% c("MasonIllumina")) %>%
   ggplot(aes(x=Position, fill = Class, colour=Class)) +
     geom_density(aes(x=Position, y=..count..*${binWidth}), alpha=0.1, bw = ${binWidth}) +
-    facet_grid(Species ~ Chromosome ~ Aligner  ~ Mode)
+    facet_grid(Species ~ Chromosome ~ Aligner  ~ Mode, scale="free", space="free")
 dev.off();
   """
 }
