@@ -359,7 +359,7 @@ process rnfEvaluateBAM {
       | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
     ) \
     <( samtools view out.bam ) \
-  | awk -vOFS="\\t" 'if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating\n"$0 > error; exit 1}' > detail
+  | awk -vOFS="\\t" 'if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating\n"\$0 > "/dev/stderr"; exit 1}' > detail
   """
 
 // rnftools sam2es OUTPUT header
